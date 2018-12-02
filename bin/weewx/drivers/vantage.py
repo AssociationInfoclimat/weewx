@@ -531,6 +531,7 @@ class Vantage(weewx.drivers.AbstractDevice):
 
         for loop in range(N):  # @UnusedVariable
             # Fetch a packet...
+            syslog.syslog(syslog.LOG_DEBUG, "vantageIC: self.port.read")
             _buffer = self.port.read(99)
             # ... see if it passes the CRC test ...
             if crc16(_buffer):
@@ -548,7 +549,7 @@ class Vantage(weewx.drivers.AbstractDevice):
         
         yields: a sequence of dictionaries containing the data
         """
-
+        syslog.syslog(syslog.LOG_DEBUG, "IC: calling genArchiveRecords(%d)"%since_ts)
         count = 0
         while count < self.max_tries:
             try:            
@@ -556,6 +557,7 @@ class Vantage(weewx.drivers.AbstractDevice):
                     # Successfully retrieved record. Set count back to zero.
                     count = 0
                     since_ts = _record['dateTime']
+                    syslog.syslog(syslog.LOG_DEBUG, "IC: got archive record %d"%since_ts)
                     yield _record
                 # The generator loop exited. We're done.
                 return
@@ -572,6 +574,7 @@ class Vantage(weewx.drivers.AbstractDevice):
         
         This version does not catch any exceptions."""
         
+        syslog.syslog(syslog.LOG_DEBUG, "IC: calling genDavisArchiveRecords(%d)"%since_ts)
         if since_ts:
             since_tt = time.localtime(since_ts)
             # NB: note that some of the Davis documentation gives the year offset as 1900.

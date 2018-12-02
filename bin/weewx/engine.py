@@ -163,8 +163,32 @@ class StdEngine(object):
 
             last_gc = time.time()
 
-            # This is the outer loop. 
+            _isPortOpen = True
+            self.dispatchEvent(weewx.Event(weewx.PRE_LOOP))
             while True:
+                syslog.syslog(syslog.LOG_DEBUG, "engineIC: start custom loop")
+                if not _isPortOpen:
+                    self.console.openPort()
+                    _isPortOpen = True
+                
+                try:
+                    for packet in self.console.genLoopPackets():
+                        self.dispatchEvent(weewx.Event(weewx.NEW_LOOP_PACKET, packet=packet))
+                        self.dispatchEvent(weewx.Event(weewx.CHECK_LOOP, packet=packet))
+                        syslog.syslog(syslog.LOG_DEBUG, "engineIC: got 1 loop packet")
+                        break
+                except BreakLoop:
+                    syslog.syslog(syslog.LOG_DEBUG, "engineIC:BreakLoop")
+                    self.dispatchEvent(weewx.Event(weewx.POST_LOOP))
+                
+                self.console.closePort()
+                _isPortOpen = False
+                syslog.syslog(syslog.LOG_DEBUG, "engineIC: sleeping for 60(%d) seconds" % self.console.archive_interval)
+                #time.sleep(self.console.archive_interval)
+                time.sleep(60)
+            
+            # This is the outer loop. 
+            while False: # @TODO IC
 
                 # See if garbage collection is scheduled:
                 if time.time() - last_gc > self.gc_interval:
@@ -556,7 +580,9 @@ class StdArchive(StdService):
         # If weewx happens to startup in the small time interval between the end of
         # the archive interval and the end of the archive delay period, then
         # there will be no old accumulator. Check for this.
+        syslog.syslog(syslog.LOG_DEBUG, "post_loopIC: called with %s" % str(event))
         if self.old_accumulator:
+            syslog.syslog(syslog.LOG_DEBUG, "post_loopIC: got an old_accumulator (record_generation = %s)"%self.record_generation)
             # If the user has requested software generation, then do that:
             if self.record_generation == 'software':
                 self._software_catchup()
@@ -565,6 +591,7 @@ class StdArchive(StdService):
                 # will be raised if the console does not support it. In that
                 # case, fall back to software generation.
                 try:
+                    syslog.syslog("post_loopIC: trying _catchup genArchiveRecords")
                     self._catchup(self.engine.console.genArchiveRecords)
                 except NotImplementedError:
                     self._software_catchup()
@@ -573,6 +600,7 @@ class StdArchive(StdService):
             self.old_accumulator = None
 
         # Set the time of the next break loop:
+        syslog.syslog(syslog.LOG_DEBUG, "post_loopIC: resetting archive period to %d + %d"%(self.end_archive_period_ts,self.archive_delay))
         self.end_archive_delay_ts = self.end_archive_period_ts + self.archive_delay
         
     def new_archive_record(self, event):
